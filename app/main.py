@@ -34,11 +34,14 @@ def save_processed(data):
 def process_request(data):
     round_num = data.get("round", 1)
     task_id = data["task"]
-    print(f"⚙ Starting background process for task {task_id} (round {round_num})")
+    print(f"⚙️ Starting background process for task {task_id} (round {round_num})")
 
     attachments = data.get("attachments", [])
     saved_attachments = decode_attachments(attachments)
     print("Attachments saved:", saved_attachments)
+
+    # Step 1: Get or create repo (MOVED HERE - BEFORE Round 2 check)
+    repo = create_repo(task_id, description=f"Auto-generated app for task: {data['brief']}")
 
     # Optional: fetch previous README for round 2
     prev_readme = None
@@ -56,17 +59,14 @@ def process_request(data):
         checks=data.get("checks", []),
         round_num=round_num,
         prev_readme=prev_readme
-        )
+    )
 
     files = gen.get("files", {})
     saved_info = gen.get("attachments", [])
 
-    # Step 1: Get or create repo
-    repo = create_repo(task_id, description=f"Auto-generated app for task: {data['brief']}")
-
     # Step 2: Round-specific logic
     if round_num == 1:
-        print("🏗 Round 1: Building fresh repo...")
+        print("🏗️ Round 1: Building fresh repo...")
         # Add attachments
         for att in saved_info:
             path = att["name"]
@@ -81,13 +81,9 @@ def process_request(data):
                     b64 = base64.b64encode(content_bytes).decode("utf-8")
                     create_or_update_file(repo, f"attachments/{att['name']}.b64", b64, f"Backup {att['name']}.b64")
             except Exception as e:
-                print("⚠ Attachment commit failed:", e)
+                print("⚠️  Attachment commit failed:", e)
     else:
-        print("🔁 Round 2: Revising existing repo...")
-        # For round 2, update existing code and README
-        # Commit new files on top of existing repo
-        for fname, content in files.items():
-            create_or_update_file(repo, fname, content, f"Update {fname} for round 2")
+        print("🔄 Round 2: Revising existing repo...")
 
     # Step 3: Common steps for both rounds
     for fname, content in files.items():
@@ -96,12 +92,11 @@ def process_request(data):
     mit_text = generate_mit_license()
     create_or_update_file(repo, "LICENSE", mit_text, "Add MIT license")
 
-    # Step 6: Handle GitHub Pages enablement or reuse existing
+    # Step 4: Handle GitHub Pages
     if data["round"] == 1:
         pages_ok = enable_pages(task_id)
         pages_url = f"https://{USERNAME}.github.io/{task_id}/" if pages_ok else None
     else:
-        # For round 2 or later, Pages already exist
         pages_ok = True
         pages_url = f"https://{USERNAME}.github.io/{task_id}/"
 
@@ -128,7 +123,6 @@ def process_request(data):
     save_processed(processed)
 
     print(f"✅ Finished round {round_num} for {task_id}")
-
 
 # === Main endpoint ===
 @app.post("/api-endpoint")
